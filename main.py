@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 import os
 import requests
+import pandas as pd
 import json
 
 load_dotenv()
@@ -14,24 +15,43 @@ headers = {
     "X-Goog-FieldMask": "routes.duration,routes.distanceMeters,"
 }
 
-body = {
+df = pd.read_excel("locations.xlsx")
+
+longest_distance = []
+longest_duration = []
+
+for index, row in df.iterrows():
+    origin_address = row['start_address']
+    destination_address = row['end_address']
+    
+    body = {
     "origin": {
-        "address": "570 Emerson Street, Coquitlam, BC"
+        "address": origin_address
     },
     "destination": {
-        "address": "989 Richards Street, Vancouver, BC"
+        "address": destination_address
     },
     "travelMode": "DRIVE",
     "computeAlternativeRoutes": True,
-}
+    }
+    response = requests.post(url, headers=headers, data=json.dumps(body))
 
+    if response.status_code == 200:
+        data = response.json()
+        # Get the routes with the longest distance
+        routes = data.get("routes")
+        longest_route = max(routes, key=lambda x: x["distanceMeters"])
+        distance_km = longest_route["distanceMeters"] / 1000 * 1.1 + 1
+        duration = longest_route["duration"]
+        longest_distance.append(distance_km)
+        longest_duration.append(duration)
+    else:
+        print("Error:", response.status_code, response.text)
 
-response = requests.post(url, headers=headers, data=json.dumps(body))
+df["distance_km"] = longest_distance
+df["duration"] = longest_duration
 
-if response.status_code == 200:
-    data = response.json()
-    for route in data.get("routes"):
-        print("Route Duration:", route.get("duration"))
-        print("Route Distance (meters):", route.get("distanceMeters"))
-else:
-    print("Error:", response.status_code, response.text)
+df.to_excel("locations.xlsx", index=False)
+
+    
+
